@@ -1,0 +1,59 @@
+// Illustrative Microsoft Sentinel / Defender-style correlation.
+// Replace NGFW_CL and field mappings with the tables used in your environment.
+// Validate locally before operational use. This query has not been tested in a live tenant.
+
+let CorrelationWindow = 5m;
+let SuspiciousFingerprints = dynamic(["example-ja3-value"]);
+let FirewallEvents =
+    NGFW_CL
+    | where TimeGenerated > ago(1h)
+    | where TlsFingerprint_s in (SuspiciousFingerprints) or ThreatAction_s =~ "alert"
+    | project
+        FirewallTime = TimeGenerated,
+        SourceIp = SourceIP_s,
+        DestinationIp = DestinationIP_s,
+        DestinationPort = toint(DestinationPort_d),
+        TlsFingerprint = TlsFingerprint_s,
+        FirewallAction = ThreatAction_s;
+let EndpointConnections =
+    DeviceNetworkEvents
+    | where Timestamp > ago(1h)
+    | project
+        EndpointTime = Timestamp,
+        SourceIp = LocalIP,
+        DestinationIp = RemoteIP,
+        DestinationPort = RemotePort,
+        DeviceId,
+        DeviceName,
+        ProcessName = InitiatingProcessFileName,
+        ProcessHash = InitiatingProcessSHA256,
+        Signer = InitiatingProcessVersionInfoCompanyName,
+        AccountName = InitiatingProcessAccountName;
+FirewallEvents
+| join kind=leftouter EndpointConnections on SourceIp, DestinationIp, DestinationPort
+| where isempty(EndpointTime)
+    or abs(datetime_diff("second", FirewallTime, EndpointTime)) <= CorrelationWindow / 1s
+| extend ContextAvailable = isnotempty(DeviceId)
+| extend RiskReason = case(
+    ContextAvailable == false, "Suspicious network signal without endpoint context",
+    isempty(Signer), "Suspicious network signal from an unsigned or unattributed process",
+    "Suspicious network signal with endpoint attribution")
+| extend Severity = case(
+    ContextAvailable == false, "Medium",
+    isempty(Signer), "High",
+    "Medium")
+| project
+    FirewallTime,
+    Severity,
+    RiskReason,
+    DeviceName,
+    AccountName,
+    ProcessName,
+    ProcessHash,
+    Signer,
+    SourceIp,
+    DestinationIp,
+    DestinationPort,
+    TlsFingerprint,
+    FirewallAction
+

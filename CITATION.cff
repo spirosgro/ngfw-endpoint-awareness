@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this portfolio case study, please cite it as follows."
+title: "Endpoint-Aware Inspection for Next-Generation Firewalls"
+type: software
+authors:
+  - family-names: Grouztidis
+    given-names: Spyridon
+  - family-names: Christaras
+    given-names: Ioakeim
+date-released: 2026-10-14
+license: LicenseRef-Proprietary
+abstract: "A research-based NGFW endpoint-awareness case study with a vendor-neutral architecture and an illustrative SOC correlation query."
+
